@@ -53,7 +53,7 @@ function mapRow(r){let section=r.section, details=r.details||"", date=r.date||""
  if(section==="d")return {id:r.id,date,amount,details};
  return {id:r.id,date,amount,details};}
 const LOCAL_STORAGE_KEY = "collection-register-data-v1";
-const LOCAL_PENDING_KEY = "collection-register-pending-sync-v1"; // offline build: unused
+const LOCAL_PENDING_KEY = "collection-register-pending-sync-v1";
 function hasAppsScriptBridge(){ return !!(window.google && window.google.script && window.google.script.run); }
 function localRows(){
   try { const saved=JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)||"null"); return saved && Array.isArray(saved.rows) ? saved : null; }
@@ -80,18 +80,37 @@ function rowsToData(rows){
   return next;
 }
 function loadData(){
+  if(hasAppsScriptBridge()){
+    setStatus("☁️ Google Sheets থেকে ডেটা লোড হচ্ছে…");
+    google.script.run
+      .withSuccessHandler(rows=>{
+        data=rowsToData(Array.isArray(rows)?rows:[]);
+        loaded=true;
+        render();
+        setStatus("☁️ অনলাইন — Google Sheets থেকে ডেটা লোড হয়েছে");
+        persistLocal();
+      })
+      .withFailureHandler(err=>{
+        const local=localRows();
+        if(local){
+          data=rowsToData(local.rows);
+          if(Number(local.selectedYear)) selectedYear=Number(local.selectedYear);
+        } else data={a:[],b:[],c:[],d:[]};
+        loaded=true; render();
+        setStatus("⚠️ অনলাইন ডেটা লোড হয়নি: "+(err && err.message ? err.message : err)+" — Local backup দেখানো হচ্ছে",true);
+      }).getRows();
+    return;
+  }
   const local=localRows();
   if(local){
     data=rowsToData(local.rows);
     if(Number(local.selectedYear)) selectedYear=Number(local.selectedYear);
-    loaded=true;
-    render();
-    setStatus("📴 অফলাইন মোড — এই ডিভাইস থেকে ডেটা লোড হয়েছে");
+    loaded=true; render();
+    setStatus("📴 অফলাইন মোড — এই ডিভাইসের Local Storage থেকে ডেটা লোড হয়েছে");
   } else {
     data={a:[],b:[],c:[],d:[]};
-    loaded=true;
-    render();
-    setStatus("📴 অফলাইন মোড — নতুন ডেটা এই ডিভাইসে সেভ হবে");
+    loaded=true; render();
+    setStatus("⚠️ অনলাইন সিঙ্কের জন্য Apps Script Web App-এর URL থেকে সিস্টেমটি খুলুন",true);
   }
 }
 function setStatus(s,bad=false){let el=document.getElementById("status");el.textContent=s;el.className="status"+(bad?" error":"");}
@@ -118,13 +137,34 @@ function scheduleAutoSave(){
   autoSaveTimer=setTimeout(()=>saveToServer(sessionPassword,true),1000);
 }
 function saveToServer(password, automatic=false){
-  const ok=persistLocal();
-  if(ok){
-    setStatus("✅ ডেটা এই ডিভাইসে সেভ হয়েছে — অফলাইন");
-    if(!automatic) alert("ডেটা এই ডিভাইসে সেভ হয়েছে।");
+  if(!editable || password!==EDIT_PASSWORD){
+    setStatus("❌ Edit password যাচাই করা যায়নি",true);
+    if(!automatic) alert("ভুল Edit password।");
+    return;
+  }
+  const localOK=persistLocal();
+  const rows=allRows().map(({section,r})=>({
+    section,
+    date:r.date||"",
+    details:section==="a"?(r.other||""):section==="b"?(r.thing||""):section==="c"?(r.member||""):(r.details||""),
+    amount:Number(r.amount)||0,
+    id:r.id||("entry-"+Date.now()+"-"+Math.random()),
+    year:dateYear(r.date)||selectedYear
+  }));
+  if(hasAppsScriptBridge()){
+    setStatus("☁️ Google Sheets-এ ডেটা সেভ হচ্ছে…");
+    google.script.run
+      .withSuccessHandler(res=>{
+        setStatus("✅ অনলাইনে সেভ হয়েছে — "+(res && Number.isFinite(Number(res.count))?res.count:rows.length)+"টি এন্ট্রি");
+        if(!automatic) alert("ডেটা Google Sheets-এ অনলাইনে সেভ হয়েছে।");
+      })
+      .withFailureHandler(err=>{
+        setStatus("⚠️ অনলাইনে সেভ হয়নি; "+(localOK?"এই ডিভাইসে backup রাখা হয়েছে":"Local backup-ও রাখা যায়নি"),true);
+        if(!automatic) alert("অনলাইনে সেভ করা যায়নি: "+(err && err.message ? err.message : err));
+      }).saveRows({password,rows});
   } else {
-    setStatus("❌ ডেটা সেভ করা যায়নি",true);
-    if(!automatic) alert("ডেটা সেভ করা যায়নি। ব্রাউজারের storage খালি করুন।");
+    setStatus(localOK?"⚠️ Apps Script Web App থেকে খোলেননি — শুধু এই ডিভাইসে সেভ হয়েছে":"❌ ডেটা সেভ করা যায়নি",true);
+    if(!automatic) alert("অনলাইনে সেভ করতে Apps Script Web App URL থেকে সিস্টেমটি খুলুন।");
   }
 }
 function downloadBackup(){
@@ -228,7 +268,18 @@ function saveAll(){
  saveToServer(password,false);
 }
 function testCloudConnection(){
-  alert("এই সংস্করণটি সম্পূর্ণ অফলাইন। Google Sheets সংযোগ বন্ধ রাখা হয়েছে।");
+  if(!hasAppsScriptBridge()){
+    alert("অনলাইন সংযোগ নেই। Apps Script Web App URL থেকে সিস্টেমটি খুলুন।");
+    return;
+  }
+  setStatus("☁️ Google Sheets সংযোগ পরীক্ষা করা হচ্ছে…");
+  google.script.run.withSuccessHandler(rows=>{
+    setStatus("✅ Google Sheets সংযোগ সফল — "+(rows||[]).length+"টি এন্ট্রি পাওয়া গেছে");
+    alert("Google Sheets সংযোগ সফল।");
+  }).withFailureHandler(err=>{
+    setStatus("❌ Google Sheets সংযোগ ব্যর্থ",true);
+    alert("সংযোগ ব্যর্থ: "+(err && err.message ? err.message : err));
+  }).getRows();
 }
 loadData();
 
