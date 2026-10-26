@@ -28,28 +28,32 @@ td input{width:100%;min-width:50px;border:1px solid transparent;background:trans
  <div class="toolbar">
   <label class="year-picker">Year নির্বাচন <select id="yearSelect" onchange="changeYear()"></select></label>
   <button id="editBtn" onclick="unlock()">🔒 Edit খুলুন</button><button class="secondary" onclick="lock()">🔐 Lock</button>
-  <button class="green" onclick="addRow('a')">+ A-তে সারি</button><button class="green" onclick="addRow('b')">+ B-তে সারি</button><button class="green" onclick="addRow('c')">+ C-তে সারি</button>
+  <button class="green" onclick="addRow('a')">+ A-তে সারি</button><button class="green" onclick="addRow('b')">+ B-তে সারি</button><button class="green" onclick="addRow('c')">+ C-তে সারি</button><button class="green" onclick="addRow('d')">+ D-তে সারি</button>
   <button class="secondary" onclick="window.print()">🖨 Print</button><button class="secondary" onclick="downloadBackup()">⬇ Backup Download</button><button class="secondary" onclick="document.getElementById('backupFile').click()">⬆ Restore Backup</button><input id="backupFile" type="file" accept=".json,application/json" hidden onchange="restoreBackupFile(event)"><button class="red" onclick="resetData()">Reset</button><span class="status" id="status">ডেটা লোড হচ্ছে…</span>
  </div>
  <div class="grid">
   <section class="card"><h2>A — Collection</h2><div class="table-wrap"><table id="tableA"><thead><tr><th>Collection date</th><th>Amount (₹)</th><th>Others / Details</th></tr></thead><tbody></tbody><tfoot><tr class="total-row"><td>Total</td><td><input id="totalA" readonly value="0"></td><td id="otherTotal">—</td></tr></tfoot></table></div></section>
   <section class="card"><h2>B — Expenses</h2><div class="table-wrap"><table id="tableB"><thead><tr><th>Date</th><th>Things name</th><th>Amount (₹)</th></tr></thead><tbody></tbody><tfoot><tr class="total-row"><td colspan="2">Total</td><td><input id="totalB" readonly value="0"></td></tr></tfoot></table></div></section>
   <section class="card"><h2>C — Member Deposit</h2><div class="table-wrap"><table id="tableC"><thead><tr><th>Member</th><th>Amount (₹)</th><th>Date</th></tr></thead><tbody></tbody><tfoot><tr class="total-row"><td>Total</td><td><input id="totalC" readonly value="0"></td><td>—</td></tr></tfoot></table></div></section>
-  <section class="card balance-card"><h2>D — Balance</h2><div class="balance-main"><div class="label">মোট জমা রাশি (A + C)</div><div class="deposit-value" id="totalDeposits">₹0</div><hr class="balance-divider"><div class="label">Available balance</div><div class="balance-value" id="balance">₹0</div><div class="formula">Balance = মোট জমা − মোট খরচ<br>(A + C) − B</div></div></section>
+  <section class="card"><h2>D — মন্দিরে চাঁদা আদায়</h2><div class="table-wrap"><table id="tableD"><thead><tr><th>তারিখ</th><th>বিবরণ</th><th>চাঁদা (₹)</th></tr></thead><tbody></tbody><tfoot><tr class="total-row"><td colspan="2">মোট চাঁদা</td><td><input id="totalD" readonly value="0"></td></tr></tfoot></table></div></section>
+  <section class="card balance-card"><h2>E — Balance</h2><div class="balance-main"><div class="label">মোট জমা (A + C + D)</div><div class="deposit-value" id="totalDeposits">₹0</div><hr class="balance-divider"><div class="label">বর্তমান ব্যালেন্স</div><div class="balance-value" id="balance">₹0</div><div class="formula">E = (A + C + D) − B</div></div></section>
  </div>
- <div class="note">ডেটা Google Sheets এবং এই ব্রাউজারের Local Storage—দুই জায়গায় সেভ হয়। Google Sheets সংযোগ না থাকলেও Local Storage-এ সেভ থাকবে; অনলাইনে ফিরলে সিঙ্কের চেষ্টা হবে। অন্য ডিভাইসে Local Storage-এর তথ্য দেখা যায় না। Edit password ডিফল্ট <b>1234</b>। Reset করলে সব এন্ট্রি মুছে যাবে।</div>
+  
 </div>
 <script>
-const EDIT_PASSWORD = "8343"; // Code.gs-এর password-এর সঙ্গে মিলতে হবে
-let editable=false, sessionPassword="", autoSaveTimer=null, selectedYear=new Date().getFullYear(), data={a:[],b:[],c:[]}, loaded=false;
+// সম্পূর্ণ অফলাইন সংস্করণ: কোনো Google Sheets / নেটওয়ার্ক সংযোগ ব্যবহার করা হয় না।
+const EDIT_PASSWORD = "1234"; // Code.gs-এর password-এর সঙ্গে মিলতে হবে
+let editable=false, sessionPassword="", autoSaveTimer=null, selectedYear=new Date().getFullYear(), data={a:[],b:[],c:[],d:[]}, loaded=false;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dateYear=s=>{let m=String(s||"").match(/(?:^|\D)(20\d{2})(?:\D|$)/);if(m)return +m[1];m=String(s||"").match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);return m?+m[3]:null};
 function mapRow(r){let section=r.section, details=r.details||"", date=r.date||"", amount=Number(r.amount)||0;
  if(section==="a")return {id:r.id,date,amount,other:details};
  if(section==="b")return {id:r.id,date,amount,thing:details};
- return {id:r.id,date,amount,member:details};}
+ if(section==="c")return {id:r.id,date,amount,member:details};
+ if(section==="d")return {id:r.id,date,amount,details};
+ return {id:r.id,date,amount,details};}
 const LOCAL_STORAGE_KEY = "collection-register-data-v1";
-const LOCAL_PENDING_KEY = "collection-register-pending-sync-v1";
+const LOCAL_PENDING_KEY = "collection-register-pending-sync-v1"; // offline build: unused
 function hasAppsScriptBridge(){ return !!(window.google && window.google.script && window.google.script.run); }
 function localRows(){
   try { const saved=JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)||"null"); return saved && Array.isArray(saved.rows) ? saved : null; }
@@ -59,12 +63,11 @@ function persistLocal(){
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
       savedAt:new Date().toISOString(), selectedYear, rows:allRows().map(({section,r})=>({
-        section,date:r.date||"",details:section==="a"?(r.other||""):section==="b"?(r.thing||""):(r.member||""),
+        section,date:r.date||"",details:section==="a"?(r.other||""):section==="b"?(r.thing||""):section==="c"?(r.member||""):(r.details||""),
         amount:Number(r.amount)||0,id:r.id||("entry-"+Date.now()+"-"+Math.random()),
         year:dateYear(r.date)||selectedYear
       }))
     }));
-    localStorage.setItem(LOCAL_PENDING_KEY,"1");
     return true;
   } catch(e) {
     setStatus("⚠️ Local Storage-এ সেভ হয়নি — ব্রাউজারের storage খালি করুন",true);
@@ -72,7 +75,7 @@ function persistLocal(){
   }
 }
 function rowsToData(rows){
-  const next={a:[],b:[],c:[]};
+  const next={a:[],b:[],c:[],d:[]};
   (rows||[]).forEach(r=>{if(next[String(r.section||"").toLowerCase()])next[String(r.section).toLowerCase()].push(mapRow(r));});
   return next;
 }
@@ -81,47 +84,29 @@ function loadData(){
   if(local){
     data=rowsToData(local.rows);
     if(Number(local.selectedYear)) selectedYear=Number(local.selectedYear);
-    loaded=true; render();
-    setStatus(localStorage.getItem(LOCAL_PENDING_KEY)==="1"?"📱 Local Storage-এ সেভ করা ডেটা — Google Sheets-এ সিঙ্ক অপেক্ষায়":"📱 Local Storage থেকে ডেটা লোড হয়েছে");
+    loaded=true;
+    render();
+    setStatus("📴 অফলাইন মোড — এই ডিভাইস থেকে ডেটা লোড হয়েছে");
+  } else {
+    data={a:[],b:[],c:[],d:[]};
+    loaded=true;
+    render();
+    setStatus("📴 অফলাইন মোড — নতুন ডেটা এই ডিভাইসে সেভ হবে");
   }
-  if(!navigator.onLine || !hasAppsScriptBridge()){
-    if(!local){loaded=true;render();setStatus("📱 অফলাইন — নতুন ডেটা Local Storage-এ সেভ হবে");}
-    else setStatus("📱 Local Storage চলছে — অনলাইন হলে সিঙ্ক হবে");
-    return;
-  }
-  if(localStorage.getItem(LOCAL_PENDING_KEY)==="1" && local){
-    setStatus("☁️ Local ডেটা Google Sheets-এ সিঙ্ক হচ্ছে…");
-    google.script.run.withSuccessHandler(res=>{
-      localStorage.removeItem(LOCAL_PENDING_KEY);
-      setStatus("✅ Local ডেটা Google Sheets-এ সিঙ্ক হয়েছে — "+res.count+"টি এন্ট্রি");
-    }).withFailureHandler(err=>{
-      setStatus("📱 Local Storage-এ ডেটা নিরাপদ আছে — সিঙ্ক পরে হবে");
-    }).saveRows({password:EDIT_PASSWORD,rows:local.rows});
-    return;
-  }
-  setStatus("☁️ Google Sheet থেকে ডেটা লোড হচ্ছে…");
-  google.script.run.withSuccessHandler(rows=>{
-    data=rowsToData(rows);loaded=true;render();persistLocal();
-    localStorage.removeItem(LOCAL_PENDING_KEY);
-    setStatus("✅ Google Sheets ও Local Storage-এ ডেটা সেভ হয়েছে");
-  }).withFailureHandler(err=>{
-    if(!local){data={a:[],b:[],c:[]};loaded=true;render();}
-    setStatus("📱 Google Sheets সংযোগ নেই — Local Storage ব্যবহার হচ্ছে");
-  }).getRows();
 }
 function setStatus(s,bad=false){let el=document.getElementById("status");el.textContent=s;el.className="status"+(bad?" error":"");}
-function allRows(){return ["a","b","c"].flatMap(section=>data[section].map(r=>({section,r})));}
+function allRows(){return ["a","b","c","d"].flatMap(section=>data[section].map(r=>({section,r})));}
 function fillYearSelect(){let years=new Set([new Date().getFullYear()]);allRows().forEach(({r})=>{let y=dateYear(r.date);if(y)years.add(y)});let sel=document.getElementById("yearSelect");sel.innerHTML=[...years].sort((a,b)=>b-a).map(y=>`<option value="${y}">${y}</option>`).join("");if(!years.has(+selectedYear))selectedYear=new Date().getFullYear();sel.value=String(selectedYear);}
 function changeYear(){selectedYear=+document.getElementById("yearSelect").value;render();}
 function visibleRows(k){return data[k].map((r,i)=>({r,i})).filter(x=>dateYear(x.r.date)===+selectedYear);}
 function inp(v,s,i,k,type="text"){return `<input ${editable?"":"readonly"} type="${type}" value="${esc(v)}" data-s="${s}" data-i="${i}" data-k="${k}" aria-label="${k}">`;}
-function render(){fillYearSelect();for(const [k,id] of [["a","tableA"],["b","tableB"],["c","tableC"]]){let body=document.querySelector(`#${id} tbody`);body.innerHTML=visibleRows(k).map(({r,i})=>k==="a"?`<tr><td>${inp(r.date,k,i,"date")}</td><td>${inp(r.amount,k,i,"amount","number")}</td><td>${inp(r.other,k,i,"other")}</td></tr>`:k==="b"?`<tr><td>${inp(r.date,k,i,"date")}</td><td>${inp(r.thing,k,i,"thing")}</td><td>${inp(r.amount,k,i,"amount","number")}</td></tr>`:`<tr><td>${inp(r.member,k,i,"member")}</td><td>${inp(r.amount,k,i,"amount","number")}</td><td>${inp(r.date,k,i,"date")}</td></tr>`).join("");}
+function render(){fillYearSelect();for(const [k,id] of [["a","tableA"],["b","tableB"],["c","tableC"],["d","tableD"]]){let body=document.querySelector(`#${id} tbody`);body.innerHTML=visibleRows(k).map(({r,i})=>k==="a"?`<tr><td>${inp(r.date,k,i,"date")}</td><td>${inp(r.amount,k,i,"amount","number")}</td><td>${inp(r.other,k,i,"other")}</td></tr>`:k==="b"?`<tr><td>${inp(r.date,k,i,"date")}</td><td>${inp(r.thing,k,i,"thing")}</td><td>${inp(r.amount,k,i,"amount","number")}</td></tr>`:k==="c"?`<tr><td>${inp(r.member,k,i,"member")}</td><td>${inp(r.amount,k,i,"amount","number")}</td><td>${inp(r.date,k,i,"date")}</td></tr>`:`<tr><td>${inp(r.date,k,i,"date")}</td><td>${inp(r.details,k,i,"details")}</td><td>${inp(r.amount,k,i,"amount","number")}</td></tr>`).join("");}
  document.querySelectorAll("input[data-s]").forEach(el=>{
    el.addEventListener("input",e=>{let x=e.target,r=data[x.dataset.s][+x.dataset.i];if(!r)return;r[x.dataset.k]=x.type==="number"?(x.value===""?"":Number(x.value)):x.value;persistLocal();scheduleAutoSave();calculate();});
    el.addEventListener("change",e=>{let x=e.target,r=data[x.dataset.s][+x.dataset.i];if(!r)return;r[x.dataset.k]=x.type==="number"?(x.value===""?"":Number(x.value)):x.value;render();persistLocal();scheduleAutoSave();});
  });
- calculate();document.getElementById("status").textContent=editable?"✏️ Edit mode active":"☁️ Google Sheet mode";document.getElementById("editBtn").textContent=editable?"✏️ Edit চলছে":"🔒 Edit খুলুন";}
-function calculate(){let sum=k=>visibleRows(k).reduce((s,x)=>s+(Number(x.r.amount)||0),0),a=sum("a"),b=sum("b"),c=sum("c");document.getElementById("totalA").value=a.toLocaleString("en-IN");document.getElementById("totalB").value=b.toLocaleString("en-IN");document.getElementById("totalC").value=c.toLocaleString("en-IN");let kg=visibleRows("a").map(x=>(x.r.other||"").match(/(\d+(?:\.\d+)?)\s*kg/i)).filter(Boolean).reduce((s,m)=>s+Number(m[1]),0);document.getElementById("otherTotal").textContent=kg?kg+" kg total":"—";document.getElementById("totalDeposits").textContent="₹"+(a+c).toLocaleString("en-IN");document.getElementById("balance").textContent="₹"+(a+c-b).toLocaleString("en-IN");}
+ calculate();document.getElementById("status").textContent=editable?"✏️ Edit mode active":"📴 Offline mode";document.getElementById("editBtn").textContent=editable?"✏️ Edit চলছে":"🔒 Edit খুলুন";}
+function calculate(){let sum=k=>visibleRows(k).reduce((s,x)=>s+(Number(x.r.amount)||0),0),a=sum("a"),b=sum("b"),c=sum("c"),d=sum("d");document.getElementById("totalA").value=a.toLocaleString("en-IN");document.getElementById("totalB").value=b.toLocaleString("en-IN");document.getElementById("totalC").value=c.toLocaleString("en-IN");document.getElementById("totalD").value=d.toLocaleString("en-IN");let kg=visibleRows("a").map(x=>(x.r.other||"").match(/(\d+(?:\.\d+)?)\s*kg/i)).filter(Boolean).reduce((s,m)=>s+Number(m[1]),0);document.getElementById("otherTotal").textContent=kg?kg+" kg total":"—";document.getElementById("totalDeposits").textContent="₹"+(a+c+d).toLocaleString("en-IN");document.getElementById("balance").textContent="₹"+(a+c+d-b).toLocaleString("en-IN");}
 function unlock(){let p=prompt("Edit password দিন:");if(p===null)return;if(p===EDIT_PASSWORD){sessionPassword=p;editable=true;render();setStatus("✏️ Edit mode active — পরিবর্তন স্বয়ংক্রিয়ভাবে সেভ হবে");}else alert("ভুল password।");}
 function lock(){editable=false;sessionPassword="";if(autoSaveTimer)clearTimeout(autoSaveTimer);render();}
 
@@ -133,29 +118,14 @@ function scheduleAutoSave(){
   autoSaveTimer=setTimeout(()=>saveToServer(sessionPassword,true),1000);
 }
 function saveToServer(password, automatic=false){
-  const rows=allRows().map(({section,r})=>({
-    section,date:r.date||"",
-    details:section==="a"?(r.other||""):section==="b"?(r.thing||""):(r.member||""),
-    amount:Number(r.amount)||0,id:r.id||("entry-"+Date.now()+"-"+Math.random()),
-    year:dateYear(r.date)||selectedYear
-  }));
-  const localOk=persistLocal();
-  if(!navigator.onLine || !hasAppsScriptBridge()){
-    setStatus(localOk?"📱 Local Storage-এ সেভ হয়েছে — অনলাইন হলে সিঙ্ক হবে":"❌ সেভ করা যায়নি",!localOk);
-    if(!automatic && !localOk) alert("Local Storage-এ সেভ করা যায়নি। ব্রাউজারের storage খালি করুন।");
-    return;
+  const ok=persistLocal();
+  if(ok){
+    setStatus("✅ ডেটা এই ডিভাইসে সেভ হয়েছে — অফলাইন");
+    if(!automatic) alert("ডেটা এই ডিভাইসে সেভ হয়েছে।");
+  } else {
+    setStatus("❌ ডেটা সেভ করা যায়নি",true);
+    if(!automatic) alert("ডেটা সেভ করা যায়নি। ব্রাউজারের storage খালি করুন।");
   }
-  if(automatic) setStatus("☁️ Google Sheets-এ সেভ হচ্ছে…");
-  document.body.classList.add("busy");
-  google.script.run.withSuccessHandler(res=>{
-    document.body.classList.remove("busy");
-    localStorage.removeItem(LOCAL_PENDING_KEY);
-    setStatus("✅ Google Sheets ও Local Storage-এ সেভ হয়েছে — "+res.count+"টি এন্ট্রি");
-  }).withFailureHandler(err=>{
-    document.body.classList.remove("busy");
-    setStatus(localOk?"📱 Google Sheets সংযোগ নেই — Local Storage-এ সেভ হয়েছে":"❌ সেভ হয়নি",!localOk);
-    if(!automatic && !localOk) alert("সেভ করা যায়নি: "+(err.message||err));
-  }).saveRows({password,rows});
 }
 function downloadBackup(){
   if(!loaded){alert("ডেটা লোড হওয়া পর্যন্ত অপেক্ষা করুন।");return;}
@@ -164,7 +134,7 @@ function downloadBackup(){
     selectedYear:selectedYear,
     rows:allRows().map(({section,r})=>({
       section,date:r.date||"",
-      details:section==="a"?(r.other||""):section==="b"?(r.thing||""):(r.member||""),
+      details:section==="a"?(r.other||""):section==="b"?(r.thing||""):section==="c"?(r.member||""):(r.details||""),
       amount:Number(r.amount)||0,id:r.id||("entry-"+Date.now()+"-"+Math.random()),
       year:dateYear(r.date)||selectedYear
     }))
@@ -194,19 +164,19 @@ function restoreBackupFile(event){
       const parsed=JSON.parse(String(reader.result||""));
       const rows=Array.isArray(parsed)?parsed:parsed.rows;
       if(!Array.isArray(rows)) throw new Error("এই JSON ফাইলে rows পাওয়া যায়নি।");
-      const next={a:[],b:[],c:[]};
+      const next={a:[],b:[],c:[],d:[]};
       rows.forEach((r,i)=>{
         const section=String(r.section||"").toLowerCase();
-        if(!["a","b","c"].includes(section)) throw new Error("সারি "+(i+1)+"-এর Section ভুল।");
+        if(!["a","b","c","d"].includes(section)) throw new Error("সারি "+(i+1)+"-এর Section ভুল।");
         const date=String(r.date||"");
         const amount=Number(r.amount)||0;
         const details=String(r.details??r.other??r.thing??r.member??"");
         const id=String(r.id||("restored-"+Date.now()+"-"+i));
         if(section==="a") next.a.push({id,date,amount,other:details});
         else if(section==="b") next.b.push({id,date,amount,thing:details});
-        else next.c.push({id,date,amount,member:details});
+        else if(section==="c") next.c.push({id,date,amount,member:details}); else next.d.push({id,date,amount,details});
       });
-      if(!confirm("Backup-এ "+rows.length+"টি এন্ট্রি আছে। এটি Google Sheet-এর বর্তমান সব এন্ট্রি প্রতিস্থাপন করবে। চালিয়ে যাবেন?")) return;
+      if(!confirm("Backup-এ "+rows.length+"টি এন্ট্রি আছে। এটি এই ডিভাইসের বর্তমান সব এন্ট্রি প্রতিস্থাপন করবে। চালিয়ে যাবেন?")) return;
       const oldData=data, oldYear=selectedYear;
       data=next;
       const years=rows.map(r=>Number(r.year)||dateYear(r.date)).filter(Boolean);
@@ -215,10 +185,10 @@ function restoreBackupFile(event){
       persistLocal();
       if(!navigator.onLine || !hasAppsScriptBridge()){
         setStatus("📱 Backup Local Storage-এ Restore হয়েছে — অনলাইনে হলে সিঙ্ক হবে");
-        alert("Backup এই ব্রাউজারের Local Storage-এ Restore হয়েছে। Google Sheets সংযোগ হলে সিঙ্ক হবে।");
+        alert("Backup এই ব্রাউজারের Local Storage-এ Restore হয়েছে।");
         return;
       }
-      setStatus("☁️ Backup Google Sheets-এ Restore হচ্ছে…");
+      setStatus("📴 Backup Local Storage-এ Restore হচ্ছে…");
       document.body.classList.add("busy");
       google.script.run.withSuccessHandler(res=>{
         document.body.classList.remove("busy");
@@ -230,11 +200,11 @@ function restoreBackupFile(event){
         document.body.classList.remove("busy");
         persistLocal();
         render();
-        setStatus("📱 Google Sheets-এ Restore হয়নি — Backup Local Storage-এ সেভ আছে; অনলাইনে হলে সিঙ্ক হবে");
-        alert("Google Sheets-এ এখন Restore করা যায়নি। ডেটা এই ব্রাউজারের Local Storage-এ রাখা হয়েছে; সংযোগ ফিরলে সিঙ্ক হবে।");
+        setStatus("📱 Backup Local Storage-এ সেভ আছে");
+        alert("ডেটা এই ব্রাউজারের Local Storage-এ রাখা হয়েছে।");
       }).saveRows({password:sessionPassword,rows:allRows().map(({section,r})=>({
         section,date:r.date||"",
-        details:section==="a"?(r.other||""):section==="b"?(r.thing||""):(r.member||""),
+        details:section==="a"?(r.other||""):section==="b"?(r.thing||""):section==="c"?(r.member||""):(r.details||""),
         amount:Number(r.amount)||0,id:r.id||("restored-"+Date.now()+"-"+Math.random()),
         year:dateYear(r.date)||selectedYear
       }))});
@@ -248,8 +218,8 @@ function restoreBackupFile(event){
   reader.readAsText(file);
 }
 
-function addRow(k){if(!editable){alert("নতুন সারি যোগ করতে আগে Edit খুলুন।");return;}let now=new Date(),pad=n=>String(n).padStart(2,"0"),d=+selectedYear===now.getFullYear()?`${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}`:`01-01-${selectedYear}`;let id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+Math.random();data[k].push(k==="a"?{id,date:d,amount:"",other:""}:k==="b"?{id,date:d,thing:"",amount:""}:{id,member:"",amount:"",date:d});render();persistLocal();scheduleAutoSave();}
-function resetData(){if(!editable){alert("Reset করতে আগে Edit খুলুন।");return;}if(!confirm("Google Sheet-এর সব এন্ট্রি মুছে ফেলবেন? এই কাজ ফেরানো যাবে না।"))return;data={a:[],b:[],c:[]};saveAll();}
+function addRow(k){if(!editable){alert("নতুন সারি যোগ করতে আগে Edit খুলুন।");return;}let now=new Date(),pad=n=>String(n).padStart(2,"0"),d=+selectedYear===now.getFullYear()?`${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}`:`01-01-${selectedYear}`;let id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+Math.random();data[k].push(k==="a"?{id,date:d,amount:"",other:""}:k==="b"?{id,date:d,thing:"",amount:""}:k==="c"?{id,member:"",amount:"",date:d}:{id,date:d,details:"",amount:""});render();persistLocal();scheduleAutoSave();}
+function resetData(){if(!editable){alert("Reset করতে আগে Edit খুলুন।");return;}if(!confirm("এই ডিভাইসের সব এন্ট্রি মুছে ফেলবেন? এই কাজ ফেরানো যাবে না।"))return;data={a:[],b:[],c:[],d:[]};saveAll();}
 function saveAll(){
  if(!editable){alert("আগে Edit খুলুন।");return;}
  let password=sessionPassword;
@@ -257,8 +227,10 @@ function saveAll(){
  if(autoSaveTimer)clearTimeout(autoSaveTimer);
  saveToServer(password,false);
 }
-const saveBtn=document.createElement("button");saveBtn.className="green";saveBtn.textContent="☁️ Save to Google Sheet";saveBtn.onclick=saveAll;document.querySelector(".toolbar").insertBefore(saveBtn,document.getElementById("status"));
+function testCloudConnection(){
+  alert("এই সংস্করণটি সম্পূর্ণ অফলাইন। Google Sheets সংযোগ বন্ধ রাখা হয়েছে।");
+}
 loadData();
-window.addEventListener("online",()=>{ if(localStorage.getItem(LOCAL_PENDING_KEY)==="1") loadData(); });
+
 </script>
 </body></html>
